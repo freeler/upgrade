@@ -1,4 +1,4 @@
-package com.freeler.myapplication
+package com.freeler.demo
 
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
