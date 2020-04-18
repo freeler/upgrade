@@ -5,9 +5,9 @@ import android.content.Intent
 import android.os.Environment
 import com.freeler.upgrade.utils.DownloadCache
 import com.freeler.upgrade.utils.SpeedCalculator
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import java.io.*
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * 下载Service
@@ -81,54 +81,50 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
         targetFile: File,
         callBack: DownloadCallBack
     ) {
-        val request = Request.Builder()
-            .addHeader("Range", "bytes=${range}${totalLength}")
-            .url(downloadUrl)
-            .build()
-        val call = OkHttpClient().newCall(request)
-        val response = call.execute()
-        if (response.isSuccessful) {
+        var inputStream: InputStream? = null
+        var randomAccessFile: RandomAccessFile? = null
+        try {
+            val url = URL(downloadUrl)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 5000
+            connection.setRequestProperty("Range", "bytes=${range}${totalLength}")
+            connection.setRequestProperty("Connection", "Keep-Alive")
+            connection.connect()
 
-            val body = response.body ?: return
-            var inputStream: InputStream? = null
-            var randomAccessFile: RandomAccessFile? = null
+            inputStream = connection.inputStream
+            randomAccessFile = RandomAccessFile(targetFile, "rwd")
+            if (range == 0L) {
+                val responseLength = connection.contentLength
+                randomAccessFile.setLength(responseLength.toLong())
+            }
+            randomAccessFile.seek(range)
+
+            var loadSize: Long = range
+            val totalSize = randomAccessFile.length()
+            val fileReader = ByteArray(1024 * 10)
+            while (true) {
+                val read = inputStream.read(fileReader)
+                if (read == -1) {
+                    break
+                }
+                randomAccessFile.write(fileReader, 0, read)
+                loadSize += read
+                callBack.onProgress(loadSize, totalSize)
+            }
+            callBack.onCompleted()
+        } catch (e: IOException) {
+            e.printStackTrace()
+            callBack.onError(e.message)
+        } catch (e: FileNotFoundException) {
+            e.printStackTrace()
+            callBack.onError(e.message)
+        } finally {
             try {
-                inputStream = body.byteStream()
-                randomAccessFile = RandomAccessFile(targetFile, "rwd")
-                if (range == 0L) {
-                    val responseLength = body.contentLength()
-                    randomAccessFile.setLength(responseLength)
-                }
-                randomAccessFile.seek(range)
-
-                var loadSize: Long = range
-                val totalSize = randomAccessFile.length()
-                val fileReader = ByteArray(1024 * 10)
-                while (true) {
-                    val read = inputStream.read(fileReader)
-                    if (read == -1) {
-                        break
-                    }
-                    randomAccessFile.write(fileReader, 0, read)
-                    loadSize += read
-                    callBack.onProgress(loadSize, totalSize)
-                }
-                callBack.onCompleted()
+                inputStream?.close()
+                randomAccessFile?.close()
             } catch (e: IOException) {
                 e.printStackTrace()
-                callBack.onError(e.message)
-            } catch (e: FileNotFoundException) {
-                e.printStackTrace()
-                callBack.onError(e.message)
-            } finally {
-                try {
-                    inputStream?.close()
-                    randomAccessFile?.close()
-                } catch (e: IOException) {
-                    e.printStackTrace()
-                }
             }
-
         }
 
     }
