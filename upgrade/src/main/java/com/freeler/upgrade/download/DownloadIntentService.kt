@@ -89,7 +89,7 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
 
                 var loadSize: Long = range
                 val totalSize = randomAccessFile.length()
-                val fileReader = ByteArray(1024 * 4)
+                val fileReader = ByteArray(1024 * 10)
                 while (true) {
                     val read = inputStream.read(fileReader)
                     if (read == -1) {
