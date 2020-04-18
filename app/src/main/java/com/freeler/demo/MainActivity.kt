@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
                 DownloadIntentService.DOWNLOAD_ACTION_PROGRESS -> {
                     val progress = intent.getLongExtra("progress", 0)
                     val speed = intent.getStringExtra("speed")
-                    mTvProgress.text = "current progress: ${}，current speed${}"
+                    mTvProgress.text = "current progress: ${progress}，current speed${speed}"
                 }
             }
         }
