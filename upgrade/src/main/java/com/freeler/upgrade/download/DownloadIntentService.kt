@@ -4,6 +4,7 @@ import android.app.IntentService
 import android.content.Intent
 import android.os.Environment
 import com.freeler.upgrade.utils.DownloadCache
+import com.freeler.upgrade.utils.SpeedCalculator
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.*
@@ -20,6 +21,9 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
         const val DOWNLOAD_ACTION_PROGRESS = "DOWNLOAD_ACTION_PROGRESS"
         const val DOWNLOAD_ACTION_INSTALL = "DOWNLOAD_ACTION_INSTALL"
     }
+
+    private val speedCalculator by lazy { SpeedCalculator() }
+
 
     override fun onHandleIntent(intent: Intent?) {
         val downloadUrl = intent?.getStringExtra("download_url") ?: ""
@@ -43,11 +47,21 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
             range = 0
         }
 
+        var lastOffset = 0L
         downloadFile(range, totalLength, downloadUrl, file, object : DownloadCallBack {
             override fun onProgress(loadSize: Long, totalSize: Long) {
                 DownloadCache.saveProgress(this@DownloadIntentService, downloadUrl, loadSize)
+
+                val increase = when (lastOffset) {
+                    0L -> 0L
+                    else -> loadSize - lastOffset
+                }
+                lastOffset = loadSize
+                speedCalculator.downloading(increase)
+                val speed = speedCalculator.speed()
+
                 val percent = loadSize * 100 / totalSize
-                eventOnProgress(percent)
+                eventOnProgress(percent, speed)
                 if (percent == 100L) {
                     eventOnInstall(fileName)
                 }
@@ -120,10 +134,11 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
     }
 
 
-    private fun eventOnProgress(percent: Long) {
+    private fun eventOnProgress(percent: Long, speed: String) {
         sendBroadcast(Intent().apply {
             action = DOWNLOAD_ACTION_PROGRESS
             putExtra("progress", percent)
+            putExtra("speed", speed)
         })
     }
 
