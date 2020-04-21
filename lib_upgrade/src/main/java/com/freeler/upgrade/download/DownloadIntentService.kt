@@ -29,13 +29,12 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
 
     override fun onHandleIntent(intent: Intent?) {
         val downloadUrl = intent?.getStringExtra("download_url") ?: ""
+        val downloadApkName = intent?.getStringExtra("download_apkName") ?: ""
         val downloadMultiple = intent?.getIntExtra("download_multiple", 10) ?: 10
-        downloadApk(downloadUrl, downloadMultiple)
+        downloadApk(downloadUrl, downloadApkName, downloadMultiple)
     }
 
-    private fun downloadApk(downloadUrl: String, downloadMultiple: Int) {
-        // 直接截取下载地址最后一个"/"后面的字符串作为下载的文件名
-        val fileName = downloadUrl.substringAfterLast("/")
+    private fun downloadApk(downloadUrl: String, fileName: String, downloadMultiple: Int) {
         // 下载文件存放在DownLoad文件夹中
         val filePath = "${Environment.DIRECTORY_DOWNLOADS}/$fileName"
         // 创建file
