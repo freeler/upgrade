@@ -37,12 +37,6 @@ class MainActivity : AppCompatActivity() {
         registerReceiver(broadcastReceiver, filter)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        unregisterReceiver(broadcastReceiver)
-    }
-
-
     private val broadcastReceiver = object : BroadcastReceiver() {
         @SuppressLint("SetTextI18n")
         override fun onReceive(context: Context, intent: Intent) {
@@ -56,10 +50,16 @@ class MainActivity : AppCompatActivity() {
                 DownloadIntentService.DOWNLOAD_ACTION_PROGRESS -> {
                     val progress = intent.getLongExtra("progress", 0)
                     val speed = intent.getStringExtra("speed")
-                    mTvProgress.text = "current progress: ${progress}，current speed${speed}"
+                    mTvProgress.text = "${progress}%"
+                    mTvSpeed.text = speed
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(broadcastReceiver)
     }
 
 }
