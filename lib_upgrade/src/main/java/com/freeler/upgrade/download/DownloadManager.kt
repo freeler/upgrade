@@ -82,7 +82,7 @@ object DownloadManager {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!context.packageManager.canRequestPackageInstalls()) {
-                // 文案与微信一致
+                // 文案与微信一致，可替换为自定义dialog
                 AlertDialog.Builder(context)
                     .setTitle("权限申请")
                     .setMessage("在设置中开启安装未知应用权限，以正常使用该功能")

@@ -22,6 +22,7 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
         const val DOWNLOAD_ACTION_INSTALL = "DOWNLOAD_ACTION_INSTALL"
     }
 
+    /** 计算下载速度辅助工具类*/
     private val speedCalculator by lazy { SpeedCalculator() }
 
 
@@ -31,10 +32,13 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
     }
 
     private fun downloadApk(downloadUrl: String) {
+        // 直接截取下载地址最后一个"/"后面的字符串作为下载的文件名
         val fileName = downloadUrl.substringAfterLast("/")
+        // 下载文件存放在DownLoad文件夹中
         val filePath = "${Environment.DIRECTORY_DOWNLOADS}/$fileName"
+        // 创建file
         val file = File(Environment.getExternalStorageDirectory().path, filePath)
-
+        // 上一次下载的进度，用于断点续传
         var range = DownloadCache.getProgress(this, downloadUrl)
         var totalLength = "-"
         if (file.exists()) {
@@ -47,19 +51,19 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
             range = 0
         }
 
+        // 上一次的下载量
         var lastOffset = 0L
         downloadFile(range, totalLength, downloadUrl, file, object : DownloadCallBack {
             override fun onProgress(loadSize: Long, totalSize: Long) {
+                // 记录当前的下载进度
                 DownloadCache.saveProgress(this@DownloadIntentService, downloadUrl, loadSize)
-
-                val increase = when (lastOffset) {
-                    0L -> 0L
-                    else -> loadSize - lastOffset
-                }
+                // 本次的下载量
+                val increase = if (lastOffset == 0L) 0L else loadSize - lastOffset
                 lastOffset = loadSize
                 speedCalculator.downloading(increase)
+                // 下载速度
                 val speed = speedCalculator.speed()
-
+                // 下载百分比 0..100
                 val percent = loadSize * 100 / totalSize
                 eventOnProgress(percent, speed)
                 if (percent == 100L) {
@@ -124,12 +128,15 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
                 randomAccessFile?.close()
             } catch (e: IOException) {
                 e.printStackTrace()
+                callBack.onError(e.message)
             }
         }
 
     }
 
-
+    /**
+     * 发送下载进度广播
+     */
     private fun eventOnProgress(percent: Long, speed: String) {
         sendBroadcast(Intent().apply {
             action = DOWNLOAD_ACTION_PROGRESS
@@ -138,6 +145,9 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
         })
     }
 
+    /**
+     * 发送安装广播
+     */
     private fun eventOnInstall(fileName: String) {
         sendBroadcast(Intent().apply {
             action = DOWNLOAD_ACTION_INSTALL
