@@ -30,11 +30,13 @@ object DownloadManager {
      *
      * @param activity 上下文
      * @param downloadURL 下载链接地址
+     * @param downloadMultiple 下载速度 1-10,默认10
      * @param apkName 下载后保存的apk名称
      */
     fun downloadApk(
         activity: Activity,
         downloadURL: String,
+        downloadMultiple: Int = 10,
         apkName: String = downloadURL.substringAfterLast("/")
     ) {
         if (isServiceRunning(activity, DownloadIntentService::class.java.name)) {
@@ -46,6 +48,7 @@ object DownloadManager {
                 val bundle = Bundle()
                 bundle.putString("download_url", downloadURL)
                 bundle.putString("download_apkName", apkName)
+                bundle.putInt("download_multiple", downloadMultiple)
                 intent.putExtras(bundle)
                 activity.startService(intent)
             }

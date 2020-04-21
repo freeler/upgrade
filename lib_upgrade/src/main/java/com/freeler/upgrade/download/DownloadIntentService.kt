@@ -20,6 +20,7 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
     companion object {
         const val DOWNLOAD_ACTION_PROGRESS = "DOWNLOAD_ACTION_PROGRESS"
         const val DOWNLOAD_ACTION_INSTALL = "DOWNLOAD_ACTION_INSTALL"
+        private const val CONNECT_TIMEOUT = 5000
     }
 
     /** 计算下载速度辅助工具类*/
@@ -28,10 +29,11 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
 
     override fun onHandleIntent(intent: Intent?) {
         val downloadUrl = intent?.getStringExtra("download_url") ?: ""
-        downloadApk(downloadUrl)
+        val downloadMultiple = intent?.getIntExtra("download_multiple", 10) ?: 10
+        downloadApk(downloadUrl, downloadMultiple)
     }
 
-    private fun downloadApk(downloadUrl: String) {
+    private fun downloadApk(downloadUrl: String, downloadMultiple: Int) {
         // 直接截取下载地址最后一个"/"后面的字符串作为下载的文件名
         val fileName = downloadUrl.substringAfterLast("/")
         // 下载文件存放在DownLoad文件夹中
@@ -53,28 +55,34 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
 
         // 上一次的下载量
         var lastOffset = 0L
-        downloadFile(range, totalLength, downloadUrl, file, object : DownloadCallBack {
-            override fun onProgress(loadSize: Long, totalSize: Long) {
-                // 记录当前的下载进度
-                DownloadCache.saveProgress(this@DownloadIntentService, downloadUrl, loadSize)
-                // 本次的下载量
-                val increase = if (lastOffset == 0L) 0L else loadSize - lastOffset
-                lastOffset = loadSize
-                speedCalculator.downloading(increase)
-                // 下载速度
-                val speed = speedCalculator.speed()
-                // 下载百分比 0..100
-                val percent = loadSize * 100 / totalSize
-                eventOnProgress(percent, speed)
-                if (percent == 100L) {
-                    eventOnInstall(fileName)
+        downloadFile(
+            range,
+            totalLength,
+            downloadUrl,
+            file,
+            downloadMultiple,
+            object : DownloadCallBack {
+                override fun onProgress(loadSize: Long, totalSize: Long) {
+                    // 记录当前的下载进度
+                    DownloadCache.saveProgress(this@DownloadIntentService, downloadUrl, loadSize)
+                    // 本次的下载量
+                    val increase = if (lastOffset == 0L) 0L else loadSize - lastOffset
+                    lastOffset = loadSize
+                    speedCalculator.downloading(increase)
+                    // 下载速度
+                    val speed = speedCalculator.speed()
+                    // 下载百分比 0..100
+                    val percent = loadSize * 100 / totalSize
+                    eventOnProgress(percent, speed)
+                    if (percent == 100L) {
+                        eventOnInstall(fileName)
+                    }
                 }
-            }
 
-            override fun onCompleted() {}
+                override fun onCompleted() {}
 
-            override fun onError(msg: String?) {}
-        })
+                override fun onError(msg: String?) {}
+            })
 
     }
 
@@ -83,6 +91,7 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
         totalLength: String,
         downloadUrl: String,
         targetFile: File,
+        downloadMultiple: Int,
         callBack: DownloadCallBack
     ) {
         var inputStream: InputStream? = null
@@ -90,7 +99,7 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
         try {
             val url = URL(downloadUrl)
             val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 5000
+            connection.connectTimeout = CONNECT_TIMEOUT
             connection.setRequestProperty("Range", "bytes=${range}${totalLength}")
             connection.setRequestProperty("Connection", "Keep-Alive")
             connection.connect()
@@ -105,7 +114,7 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
 
             var loadSize: Long = range
             val totalSize = randomAccessFile.length()
-            val fileReader = ByteArray(1024 * 10)
+            val fileReader = ByteArray(1024 * downloadMultiple)
             while (true) {
                 val read = inputStream.read(fileReader)
                 if (read == -1) {
