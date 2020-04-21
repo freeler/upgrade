@@ -42,7 +42,7 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 DownloadIntentService.DOWNLOAD_ACTION_INSTALL -> {
-                    DownloadManager.checkInstallPermission(
+                    DownloadManager.installWithPermission(
                         this@MainActivity,
                         intent.getStringExtra("fileName") ?: ""
                     )

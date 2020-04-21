@@ -79,10 +79,7 @@ object DownloadManager {
     /**
      * 检查权限并安装
      */
-    fun checkInstallPermission(context: Activity, fileName: String) {
-        val filePath = "${Environment.DIRECTORY_DOWNLOADS}/$fileName"
-        val apk = File(Environment.getExternalStorageDirectory().path, filePath)
-
+    fun installWithPermission(context: Activity, fileName: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!context.packageManager.canRequestPackageInstalls()) {
                 // 文案与微信一致，可替换为自定义dialog
@@ -97,17 +94,17 @@ object DownloadManager {
                         context.startForResult(intent) { resultCode, _ ->
                             if (resultCode == Activity.RESULT_OK) {
                                 if (context.packageManager.canRequestPackageInstalls()) {
-                                    installApk(context, apk)
+                                    installApk(context, fileName)
                                 }
                             }
                         }
                     }
                     .show()
             } else {
-                installApk(context, apk)
+                installApk(context, fileName)
             }
         } else {
-            installApk(context, apk)
+            installApk(context, fileName)
         }
     }
 
@@ -115,7 +112,10 @@ object DownloadManager {
     /**
      * 安装APK
      */
-    private fun installApk(context: Context, apk: File) {
+    fun installApk(context: Context, fileName: String) {
+        val filePath = "${Environment.DIRECTORY_DOWNLOADS}/$fileName"
+        val apk = File(Environment.getExternalStorageDirectory().path, filePath)
+
         try {
             val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 FileProvider.getUriForFile(
