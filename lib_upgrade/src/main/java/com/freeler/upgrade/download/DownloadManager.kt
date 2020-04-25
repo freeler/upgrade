@@ -1,10 +1,13 @@
 package com.freeler.upgrade.download
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.AlertDialog
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +27,69 @@ import java.io.File
  * @Date: 2020/4/10
  */
 object DownloadManager {
+
+    private var broadcastReceiver: BroadcastReceiver? = null
+
+    fun registerWithAutoInstall(
+        activity: Activity,
+        progressCallBack: (Long, String) -> Unit
+    ) {
+        broadcastReceiver = object : BroadcastReceiver() {
+            @SuppressLint("SetTextI18n")
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    DownloadIntentService.DOWNLOAD_ACTION_INSTALL -> {
+                        installWithPermission(activity, intent.getStringExtra("fileName") ?: "")
+                    }
+                    DownloadIntentService.DOWNLOAD_ACTION_PROGRESS -> {
+                        val progress = intent.getLongExtra("progress", 0)
+                        val speed = intent.getStringExtra("speed")
+                        progressCallBack(progress, speed)
+                    }
+                }
+            }
+        }
+        registerReceiver(activity)
+    }
+
+    fun register(
+        context: Context,
+        installCallBack: (String) -> Unit,
+        progressCallBack: (Long, String) -> Unit
+    ) {
+        broadcastReceiver = object : BroadcastReceiver() {
+            @SuppressLint("SetTextI18n")
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    DownloadIntentService.DOWNLOAD_ACTION_INSTALL -> {
+                        installCallBack(intent.getStringExtra("fileName") ?: "")
+                    }
+                    DownloadIntentService.DOWNLOAD_ACTION_PROGRESS -> {
+                        val progress = intent.getLongExtra("progress", 0)
+                        val speed = intent.getStringExtra("speed")
+                        progressCallBack(progress, speed)
+                    }
+                }
+            }
+        }
+        registerReceiver(context)
+    }
+
+    private fun registerReceiver(context: Context) {
+        broadcastReceiver?.let {
+            val filter = IntentFilter()
+            // 下载Service返回的进度
+            filter.addAction(DownloadIntentService.DOWNLOAD_ACTION_PROGRESS)
+            // 下载Service返回的安装动作
+            filter.addAction(DownloadIntentService.DOWNLOAD_ACTION_INSTALL)
+            context.registerReceiver(it, filter)
+        }
+    }
+
+
+    fun unregister(context: Context) {
+        broadcastReceiver?.let { context.unregisterReceiver(it) }
+    }
 
     /**
      * 下载APK
