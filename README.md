@@ -34,9 +34,11 @@ override fun onCreate(savedInstanceState: Bundle?) {
     mBtnStartDownload.setOnClickListener {
         // 开启下载，下载会在IntentService中执行，如果当前正在下载中，不会重复执行下载任务
         DownloadManager.downloadApk(
-            this, "https://static.yuxiaor.com/Yuxiaor_3.3.4_6350.apk"
+            this, "https://XXX/XXX.apk"
         )
     }
+
+    register()
 
 }
 
