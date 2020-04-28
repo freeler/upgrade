@@ -10,11 +10,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
+import com.freeler.upgrade.R
 import com.freeler.upgrade.utils.requestPermission
 import com.freeler.upgrade.utils.startForResult
 import java.io.File
@@ -30,63 +31,68 @@ object DownloadManager {
 
     private var broadcastReceiver: BroadcastReceiver? = null
 
-    fun registerWithAutoInstall(
-        activity: Activity,
-        progressCallBack: (Long, String) -> Unit
-    ) {
-        broadcastReceiver = object : BroadcastReceiver() {
-            @SuppressLint("SetTextI18n")
-            override fun onReceive(context: Context, intent: Intent) {
-                when (intent.action) {
-                    DownloadIntentService.DOWNLOAD_ACTION_INSTALL -> {
-                        installWithPermission(activity, intent.getStringExtra("fileName") ?: "")
-                    }
-                    DownloadIntentService.DOWNLOAD_ACTION_PROGRESS -> {
-                        val progress = intent.getLongExtra("progress", 0)
-                        val speed = intent.getStringExtra("speed")
-                        progressCallBack(progress, speed)
-                    }
-                }
-            }
-        }
-        registerReceiver(activity)
+    /**
+     * 此方式注册下载完成后会自动安装apk，安装前会校验设置中开启安装未知应用权限是否开启,
+     * 如果开启了直接执行安装步骤，
+     * 如未开启则会先跳转到设置中引导用户开启（context不是Activity的话会跳过该步骤）
+     */
+    fun registerWithAutoInstall(context: Context, progressCallBack: (Long, String) -> Unit) {
+        registerReceiver(context, progressCallBack, null, true)
     }
 
+    /**
+     * 此方式注册下载需要自己去监听回调方法来执行apk安装
+     */
     fun register(
         context: Context,
-        installCallBack: (String) -> Unit,
-        progressCallBack: (Long, String) -> Unit
+        progressCallBack: (Long, String) -> Unit,
+        installCallBack: (String) -> Unit
+    ) {
+        registerReceiver(context, progressCallBack, installCallBack, false)
+    }
+
+    private fun registerReceiver(
+        context: Context,
+        progressCallBack: ((Long, String) -> Unit)? = null,
+        installCallBack: ((String) -> Unit)? = null,
+        autoInstall: Boolean = true
     ) {
         broadcastReceiver = object : BroadcastReceiver() {
             @SuppressLint("SetTextI18n")
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
                     DownloadIntentService.DOWNLOAD_ACTION_INSTALL -> {
-                        installCallBack(intent.getStringExtra("fileName") ?: "")
+                        // 文件名
+                        val name = intent.getStringExtra(DownloadIntentService.EXTRA_FILENAME) ?: ""
+                        if (autoInstall) {
+                            installWithPermission(context, name)
+                        }
+                        installCallBack?.invoke(name)
                     }
                     DownloadIntentService.DOWNLOAD_ACTION_PROGRESS -> {
-                        val progress = intent.getLongExtra("progress", 0)
-                        val speed = intent.getStringExtra("speed")
-                        progressCallBack(progress, speed)
+                        // 下载进度 0-100L
+                        val progress = intent.getLongExtra(DownloadIntentService.EXTRA_PROGRESS, 0)
+                        // 下载速度
+                        val speed = intent.getStringExtra(DownloadIntentService.EXTRA_SPEED) ?: ""
+                        progressCallBack?.invoke(progress, speed)
                     }
                 }
             }
         }
-        registerReceiver(context)
-    }
 
-    private fun registerReceiver(context: Context) {
-        broadcastReceiver?.let {
-            val filter = IntentFilter()
+        val filter = IntentFilter().apply {
             // 下载Service返回的进度
-            filter.addAction(DownloadIntentService.DOWNLOAD_ACTION_PROGRESS)
+            this.addAction(DownloadIntentService.DOWNLOAD_ACTION_PROGRESS)
             // 下载Service返回的安装动作
-            filter.addAction(DownloadIntentService.DOWNLOAD_ACTION_INSTALL)
-            context.registerReceiver(it, filter)
+            this.addAction(DownloadIntentService.DOWNLOAD_ACTION_INSTALL)
         }
+        context.registerReceiver(broadcastReceiver, filter)
     }
 
 
+    /**
+     * 取消注册
+     */
     fun unregister(context: Context) {
         broadcastReceiver?.let { context.unregisterReceiver(it) }
     }
@@ -110,12 +116,11 @@ object DownloadManager {
         }
         activity.requestPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) {
             if (it) {
-                val intent = Intent(activity, DownloadIntentService::class.java)
-                val bundle = Bundle()
-                bundle.putString("download_url", downloadURL)
-                bundle.putString("download_apkName", apkName)
-                bundle.putInt("download_multiple", downloadMultiple)
-                intent.putExtras(bundle)
+                val intent = Intent(activity, DownloadIntentService::class.java).apply {
+                    this.putExtra(DownloadIntentService.EXTRA_DOWNLOAD_URL, downloadURL)
+                    this.putExtra(DownloadIntentService.EXTRA_DOWNLOAD_NAME, apkName)
+                    this.putExtra(DownloadIntentService.EXTRA_DOWNLOAD_MULTIPLE, downloadMultiple)
+                }
                 activity.startService(intent)
             }
         }
@@ -125,8 +130,9 @@ object DownloadManager {
      * 用来判断服务是否运行.
      *
      * @param className 判断的服务名字
-     * @return true 在运行 false 不在运行
+     * @return true:在运行 false:不在运行
      */
+    @Suppress("DEPRECATION")
     private fun isServiceRunning(activity: Activity, className: String): Boolean {
         val activityManager = activity.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val serviceList = activityManager.getRunningServices(Integer.MAX_VALUE)
@@ -145,27 +151,14 @@ object DownloadManager {
     /**
      * 检查权限并安装
      */
-    fun installWithPermission(context: Activity, fileName: String) {
+    fun installWithPermission(context: Context, fileName: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!context.packageManager.canRequestPackageInstalls()) {
-                // 文案与微信一致，可替换为自定义dialog
-                AlertDialog.Builder(context)
-                    .setTitle("权限申请")
-                    .setMessage("在设置中开启安装未知应用权限，以正常使用该功能")
-                    .setNegativeButton("取消") { dialog, _ -> dialog.dismiss() }
-                    .setPositiveButton("去设置") { dialog, _ ->
-                        dialog.dismiss()
-                        val url = Uri.parse("package:${context.packageName}")
-                        val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, url)
-                        context.startForResult(intent) { resultCode, _ ->
-                            if (resultCode == Activity.RESULT_OK) {
-                                if (context.packageManager.canRequestPackageInstalls()) {
-                                    installApk(context, fileName)
-                                }
-                            }
-                        }
-                    }
-                    .show()
+                if (context !is Activity) {
+                    installApk(context, fileName)
+                    return
+                }
+                showSettingDialog(context, fileName)
             } else {
                 installApk(context, fileName)
             }
@@ -174,30 +167,52 @@ object DownloadManager {
         }
     }
 
+    /**
+     * 文案与微信一致，可替换为自定义dialog
+     */
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun showSettingDialog(activity: Activity, fileName: String) {
+        AlertDialog.Builder(activity, R.style.MyDialogStyle)
+            .setTitle("权限申请")
+            .setMessage("在设置中开启安装未知应用权限，以正常使用该功能")
+            .setCancelable(false)
+            .setNegativeButton("取消") { dialog, _ -> dialog.dismiss() }
+            .setPositiveButton("去设置") { dialog, _ ->
+                dialog.dismiss()
+                val url = Uri.parse("package:${activity.packageName}")
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, url)
+                activity.startForResult(intent) { resultCode, _ ->
+                    if (resultCode == Activity.RESULT_OK) {
+                        if (activity.packageManager.canRequestPackageInstalls()) {
+                            installApk(activity, fileName)
+                        }
+                    }
+                }
+            }
+            .show()
+    }
 
     /**
      * 安装APK
      */
-    fun installApk(context: Context, fileName: String) {
+    private fun installApk(context: Context, fileName: String) {
         val filePath = "${Environment.DIRECTORY_DOWNLOADS}/$fileName"
         val apk = File(Environment.getExternalStorageDirectory().path, filePath)
 
         try {
             val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                FileProvider.getUriForFile(
-                    context,
-                    context.applicationInfo.packageName + ".fileProvider",
-                    apk
-                )
+                val authority = "${context.applicationInfo.packageName}.fileProvider"
+                FileProvider.getUriForFile(context, authority, apk)
             } else {
                 Uri.fromFile(apk)
             }
 
-            val intent = Intent(Intent.ACTION_VIEW)
-            intent.addCategory(Intent.CATEGORY_DEFAULT)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            intent.setDataAndType(uri, "application/vnd.android.package-archive")
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                this.addCategory(Intent.CATEGORY_DEFAULT)
+                this.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                this.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                this.setDataAndType(uri, "application/vnd.android.package-archive")
+            }
             context.startActivity(intent)
         } catch (e: Exception) {
             e.printStackTrace()

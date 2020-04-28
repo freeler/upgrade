@@ -13,13 +13,18 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         mBtnStartDownload.setOnClickListener {
-            // 开启下载，下载会在IntentService中执行，如果当前正在下载中，不会重复执行下载任务
-            DownloadManager.downloadApk(
-                this, "https://static.yuxiaor.com/Yuxiaor_3.3.4_6350.apk"
-            )
+            startUpdate()
         }
 
         register()
+//        register2()
+    }
+
+    private fun startUpdate() {
+        // 开启下载，下载会在IntentService中执行，如果当前正在下载中，不会重复执行下载任务
+        DownloadManager.downloadApk(
+            this, "https://static.yuxiaor.com/Yuxiaor_3.3.4_6350.apk"
+        )
     }
 
     @SuppressLint("SetTextI18n")
@@ -28,18 +33,20 @@ class MainActivity : AppCompatActivity() {
             mTvProgress.text = "${progress}%"
             mTvSpeed.text = speed
         }
-
-        // or auto manual install
-//        DownloadManager.register(this, { fileName ->
-//            // there is a dialog in install method,if we register context is not activity,
-//            // wo must manual install by this method.
-//            DownloadManager.installWithPermission(this, fileName)
-//        }, { progress, speed ->
-//            mTvProgress.text = "${progress}%"
-//            mTvSpeed.text = speed
-//        })
     }
 
+    // or auto manual install
+    @SuppressLint("SetTextI18n")
+    private fun register2() {
+        DownloadManager.register(this, { progress, speed ->
+            mTvProgress.text = "${progress}%"
+            mTvSpeed.text = speed
+        }, { fileName ->
+            // there is a dialog in install method,if we register context is not activity,
+            // we must manual install by this method.
+            DownloadManager.installWithPermission(this, fileName)
+        })
+    }
 
     override fun onDestroy() {
         super.onDestroy()

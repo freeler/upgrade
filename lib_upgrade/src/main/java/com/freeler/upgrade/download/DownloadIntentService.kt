@@ -20,6 +20,14 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
     companion object {
         const val DOWNLOAD_ACTION_PROGRESS = "DOWNLOAD_ACTION_PROGRESS"
         const val DOWNLOAD_ACTION_INSTALL = "DOWNLOAD_ACTION_INSTALL"
+
+        const val EXTRA_DOWNLOAD_URL = "download_url"
+        const val EXTRA_DOWNLOAD_NAME = "download_apkName"
+        const val EXTRA_DOWNLOAD_MULTIPLE = "download_multiple"
+
+        const val EXTRA_PROGRESS = "progress"
+        const val EXTRA_SPEED = "speed"
+        const val EXTRA_FILENAME = "fileName"
         private const val CONNECT_TIMEOUT = 5000
     }
 
@@ -28,9 +36,9 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
 
 
     override fun onHandleIntent(intent: Intent?) {
-        val downloadUrl = intent?.getStringExtra("download_url") ?: ""
-        val downloadApkName = intent?.getStringExtra("download_apkName") ?: ""
-        val downloadMultiple = intent?.getIntExtra("download_multiple", 10) ?: 10
+        val downloadUrl = intent?.getStringExtra(EXTRA_DOWNLOAD_URL) ?: ""
+        val downloadApkName = intent?.getStringExtra(EXTRA_DOWNLOAD_NAME) ?: ""
+        val downloadMultiple = intent?.getIntExtra(EXTRA_DOWNLOAD_MULTIPLE, 10) ?: 10
         downloadApk(downloadUrl, downloadApkName, downloadMultiple)
     }
 
@@ -54,12 +62,7 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
 
         // 上一次的下载量
         var lastOffset = 0L
-        downloadFile(
-            range,
-            totalLength,
-            downloadUrl,
-            file,
-            downloadMultiple,
+        downloadFile(range, totalLength, downloadUrl, file, downloadMultiple,
             object : DownloadCallBack {
                 override fun onProgress(loadSize: Long, totalSize: Long) {
                     // 记录当前的下载进度
@@ -86,40 +89,36 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
     }
 
     private fun downloadFile(
-        range: Long,
-        totalLength: String,
-        downloadUrl: String,
-        targetFile: File,
-        downloadMultiple: Int,
-        callBack: DownloadCallBack
+        range: Long, totalLength: String, downloadUrl: String, targetFile: File,
+        downloadMultiple: Int, callBack: DownloadCallBack
     ) {
         var inputStream: InputStream? = null
         var randomAccessFile: RandomAccessFile? = null
         try {
-            val url = URL(downloadUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = CONNECT_TIMEOUT
-            connection.setRequestProperty("Range", "bytes=${range}${totalLength}")
-            connection.setRequestProperty("Connection", "Keep-Alive")
-            connection.connect()
+            val connection = (URL(downloadUrl).openConnection() as HttpURLConnection).apply {
+                this.connectTimeout = CONNECT_TIMEOUT
+                this.setRequestProperty("Range", "bytes=${range}${totalLength}")
+                this.setRequestProperty("Connection", "Keep-Alive")
+                this.connect()
+            }
 
             inputStream = connection.inputStream
-            randomAccessFile = RandomAccessFile(targetFile, "rwd")
-            if (range == 0L) {
-                val responseLength = connection.contentLength
-                randomAccessFile.setLength(responseLength.toLong())
+            randomAccessFile = RandomAccessFile(targetFile, "rwd").apply {
+                if (range == 0L) {
+                    this.setLength(connection.contentLength.toLong())
+                }
+                this.seek(range)
             }
-            randomAccessFile.seek(range)
 
-            var loadSize: Long = range
+            var loadSize = range
             val totalSize = randomAccessFile.length()
-            val fileReader = ByteArray(1024 * downloadMultiple)
+            val bytes = ByteArray(1024 * downloadMultiple)
             while (true) {
-                val read = inputStream.read(fileReader)
+                val read = inputStream.read(bytes)
                 if (read == -1) {
                     break
                 }
-                randomAccessFile.write(fileReader, 0, read)
+                randomAccessFile.write(bytes, 0, read)
                 loadSize += read
                 callBack.onProgress(loadSize, totalSize)
             }
@@ -148,8 +147,8 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
     private fun eventOnProgress(percent: Long, speed: String) {
         sendBroadcast(Intent().apply {
             action = DOWNLOAD_ACTION_PROGRESS
-            putExtra("progress", percent)
-            putExtra("speed", speed)
+            putExtra(EXTRA_PROGRESS, percent)
+            putExtra(EXTRA_SPEED, speed)
         })
     }
 
@@ -159,7 +158,7 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
     private fun eventOnInstall(fileName: String) {
         sendBroadcast(Intent().apply {
             action = DOWNLOAD_ACTION_INSTALL
-            putExtra("fileName", fileName)
+            putExtra(EXTRA_FILENAME, fileName)
         })
     }
 
