@@ -4,6 +4,7 @@ Android 版本升级
 - 支持断点续传;
 - 支持下载速度计算;
 - 仅可同时下载一个文件（防止重复下载）;
+- 支持检测网络状态，网络重连后自动继续下载;
 
 ## Screenshot
 
@@ -32,14 +33,18 @@ override fun onCreate(savedInstanceState: Bundle?) {
     setContentView(R.layout.activity_main)
 
     mBtnStartDownload.setOnClickListener {
-        // 开启下载，下载会在IntentService中执行，如果当前正在下载中，不会重复执行下载任务
-        DownloadManager.downloadApk(
-            this, "https://XXX/XXX.apk"
-        )
+        startUpdate()
     }
 
     register()
+    //register2()
+}
 
+private fun startUpdate() {
+    // 开启下载，下载会在IntentService中执行，如果当前正在下载中，不会重复执行下载任务
+    DownloadManager.downloadApk(
+        this, "https://XXX/YYY.apk"
+    )
 }
 
 @SuppressLint("SetTextI18n")
@@ -48,24 +53,25 @@ private fun register() {
         mTvProgress.text = "${progress}%"
         mTvSpeed.text = speed
     }
-
-    // or auto manual install
-//        DownloadManager.register(this, { fileName ->
-//            // there is a dialog in install method,if we register context is not activity,
-//            // wo must manual install by this method.
-//            DownloadManager.installWithPermission(this, fileName)
-//        }, { progress, speed ->
-//            mTvProgress.text = "${progress}%"
-//            mTvSpeed.text = speed
-//        })
 }
 
+// or auto manual install
+@SuppressLint("SetTextI18n")
+private fun register2() {
+    DownloadManager.register(this, { progress, speed ->
+        mTvProgress.text = "${progress}%"
+        mTvSpeed.text = speed
+    }, { fileName ->
+        // there is a dialog in install method,if we register context is not activity,
+        // we must manual install by this method.
+        DownloadManager.installWithPermission(this, fileName)
+    })
+}
 
 override fun onDestroy() {
     super.onDestroy()
     DownloadManager.unregister(this)
 }
-
 
 
 ```

@@ -3,11 +3,13 @@ package com.freeler.upgrade.download
 import android.app.IntentService
 import android.content.Intent
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import com.freeler.upgrade.utils.DownloadCache
 import com.freeler.upgrade.utils.SpeedCalculator
 import java.io.*
-import java.net.HttpURLConnection
-import java.net.URL
+import java.net.*
 
 /**
  * 下载Service
@@ -83,7 +85,15 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
 
                 override fun onCompleted() {}
 
-                override fun onError(msg: String?) {}
+                override fun onError(e: Exception) {
+                    Handler(Looper.getMainLooper()).post {
+                        Toast.makeText(
+                            applicationContext,
+                            if (e is SocketTimeoutException || e is UnknownHostException || e is ConnectException) "请检查当前网络" else e.message,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
             })
 
     }
@@ -125,17 +135,17 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
             callBack.onCompleted()
         } catch (e: IOException) {
             e.printStackTrace()
-            callBack.onError(e.message)
+            callBack.onError(e)
         } catch (e: FileNotFoundException) {
             e.printStackTrace()
-            callBack.onError(e.message)
+            callBack.onError(e)
         } finally {
             try {
                 inputStream?.close()
                 randomAccessFile?.close()
             } catch (e: IOException) {
                 e.printStackTrace()
-                callBack.onError(e.message)
+                callBack.onError(e)
             }
         }
 
@@ -168,7 +178,7 @@ class DownloadIntentService : IntentService("DownloadIntentService") {
     interface DownloadCallBack {
         fun onProgress(loadSize: Long, totalSize: Long)
         fun onCompleted()
-        fun onError(msg: String?)
+        fun onError(e: Exception)
     }
 
 

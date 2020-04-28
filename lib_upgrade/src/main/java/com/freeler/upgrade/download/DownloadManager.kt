@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -19,6 +20,7 @@ import com.freeler.upgrade.R
 import com.freeler.upgrade.utils.requestPermission
 import com.freeler.upgrade.utils.startForResult
 import java.io.File
+import java.lang.ref.WeakReference
 
 
 /**
@@ -30,6 +32,10 @@ import java.io.File
 object DownloadManager {
 
     private var broadcastReceiver: BroadcastReceiver? = null
+    private var cashActivity: WeakReference<Activity>? = null
+    private var cashDownloadUrl: String? = null
+    private var cashMultiple: Int? = null
+    private var cashApkName: String? = null
 
     /**
      * 此方式注册下载完成后会自动安装apk，安装前会校验设置中开启安装未知应用权限是否开启,
@@ -51,6 +57,7 @@ object DownloadManager {
         registerReceiver(context, progressCallBack, installCallBack, false)
     }
 
+    @Suppress("DEPRECATION")
     private fun registerReceiver(
         context: Context,
         progressCallBack: ((Long, String) -> Unit)? = null,
@@ -76,6 +83,17 @@ object DownloadManager {
                         val speed = intent.getStringExtra(DownloadIntentService.EXTRA_SPEED) ?: ""
                         progressCallBack?.invoke(progress, speed)
                     }
+                    ConnectivityManager.CONNECTIVITY_ACTION -> {
+                        val connectivityManager =
+                            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                        val networkInfo = connectivityManager.activeNetworkInfo
+                        if (networkInfo?.isConnected == true) {
+                            when (networkInfo.type) {
+                                ConnectivityManager.TYPE_WIFI -> downloadContinue()
+                                ConnectivityManager.TYPE_MOBILE -> downloadMobile(context)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -85,10 +103,41 @@ object DownloadManager {
             this.addAction(DownloadIntentService.DOWNLOAD_ACTION_PROGRESS)
             // 下载Service返回的安装动作
             this.addAction(DownloadIntentService.DOWNLOAD_ACTION_INSTALL)
+            // 网络连接状态
+            this.addAction(ConnectivityManager.CONNECTIVITY_ACTION)
         }
         context.registerReceiver(broadcastReceiver, filter)
+
     }
 
+    /**
+     * 使用窝蜂数据下载
+     * @param context 如果该上下文是Activity才
+     */
+    private fun downloadMobile(context: Context) {
+        if (context is Activity) {
+            AlertDialog.Builder(context, R.style.MyDialogStyle)
+                .setMessage("当前使用窝蜂数据，是否继续下载？")
+                .setCancelable(false)
+                .setNegativeButton("否") { dialog, _ -> dialog.dismiss() }
+                .setPositiveButton("是") { dialog, _ ->
+                    dialog.dismiss()
+                    downloadContinue()
+                }
+                .show()
+        } else {
+            downloadContinue()
+        }
+    }
+
+    /**
+     * 继续下载
+     */
+    private fun downloadContinue() {
+        if (cashActivity != null && cashDownloadUrl != null && cashMultiple != null && cashApkName != null) {
+            downloadApk(cashActivity!!.get()!!, cashDownloadUrl!!, cashMultiple!!, cashApkName!!)
+        }
+    }
 
     /**
      * 取消注册
@@ -111,6 +160,10 @@ object DownloadManager {
         downloadMultiple: Int = 10,
         apkName: String = downloadURL.substringAfterLast("/")
     ) {
+        cashActivity = WeakReference(activity)
+        cashDownloadUrl = downloadURL
+        cashMultiple = downloadMultiple
+        cashApkName = apkName
         if (isServiceRunning(activity, DownloadIntentService::class.java.name)) {
             return
         }
